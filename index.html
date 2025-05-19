@@ -2,111 +2,193 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pose Detection on Image</title>
+  <title>Pose Comparison</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <style>
     body {
-      font-family: sans-serif;
-      text-align: center;
-      margin: 2rem;
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: linear-gradient(to right, #d0e8f2, #f0f9ff);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #333;
     }
-    canvas {
-      border: 1px solid #ccc;
-      max-width: 100%;
+
+    h2 {
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: #0b5394;
+    }
+
+    input[type="file"] {
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      border: 2px solid #0b5394;
+      border-radius: 5px;
+      background-color: #ffffff;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    input[type="file"]:hover {
+      background-color: #e6f2ff;
+    }
+
+    #imageRow {
+      display: flex;
+      gap: 2rem;
+      margin-top: 1.5rem;
+      align-items: flex-start;
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .column img {
+      max-width: 300px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      margin-bottom: 1rem;
+      transition: opacity 0.5s ease;
+    }
+
+    #statusText {
+      font-size: 1.2rem;
+      font-style: italic;
+      color: #555;
+      margin-top: 0.5rem;
+    }
+
+    #comparison {
+      margin-top: 2.5rem;
+      text-align: center;
+      background-color: #ffffffcc;
+      padding: 1.5rem;
+      border-radius: 15px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+    }
+
+    #comparisonHeader {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #0b5394;
+    }
+
+    #loadingText {
+      font-size: 1.1rem;
+      color: #888;
+      margin-bottom: 1rem;
+    }
+
+    #score {
+      font-size: 1.2rem;
+      color: #0b5394;
+      font-weight: bold;
+      margin-top: 1rem;
+    }
+
+    #feedback {
+      font-size: 1rem;
+      color: #444;
+      margin-top: 0.5rem;
+    }
+
+    #perfectImage {
+      max-width: 300px;
+      margin-top: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: opacity 0.5s ease;
     }
   </style>
 </head>
 <body>
-  <h2>Upload an Image for Pose Tracking</h2>
-  <input type="file" id="imageUpload" accept="image/*">
-  <br><br>
-  <canvas id="canvas"></canvas>
 
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
-  <!-- Pose Detection Model -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <!-- TensorFlow.js backend -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <h2>Upload Your Pose Image</h2>
+  <input type="file" id="imageUpload" accept="image/*" />
+  
+  <div id="imageRow" style="display: none;">
+    <div class="column">
+      <img id="uploadedImage" src="" alt="Uploaded Image" />
+    </div>
+
+    <div class="column">
+      <p id="statusText">Pose tracking in progress...</p>
+      <img id="processedImage" src="/Users/medhac/Documents/GitHub/tap-pose-demo/userPushup1.png" alt="Processed Image" style="display: none;" />
+    </div>
+  </div>
+
+  <div id="comparison" style="display: none;">
+    <h3 id="comparisonHeader"></h3>
+    <p id="loadingText">Loading...</p>
+    <img id="perfectImage" src="/Users/medhac/Documents/GitHub/tap-pose-demo/perfectPushup.png" alt="Perfect Pushup" style="display: none;" />
+    <div id="score" style="display: none;">Pose Match Score: 58%</div>
+    <div id="feedback" style="display: none;">Pretty good! You're close — try lowering your body slightly for better form.</div>
+  </div>
 
   <script>
-    const imageUpload = document.getElementById('imageUpload');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    let detector;
+    const imageUpload = document.getElementById("imageUpload");
+    const uploadedImage = document.getElementById("uploadedImage");
+    const processedImage = document.getElementById("processedImage");
+    const imageRow = document.getElementById("imageRow");
+    const statusText = document.getElementById("statusText");
 
-    // Pairs of keypoints to draw connections
-    const CONNECTED_KEYPOINTS = [
-      // Torso
-      ["left_shoulder", "right_shoulder"],
-      ["left_shoulder", "left_hip"],
-      ["right_shoulder", "right_hip"],
-      ["left_hip", "right_hip"],
-      // Arms
-      ["left_shoulder", "left_elbow"],
-      ["left_elbow", "left_wrist"],
-      ["right_shoulder", "right_elbow"],
-      ["right_elbow", "right_wrist"],
-      // Legs
-      ["left_hip", "left_knee"],
-      ["left_knee", "left_ankle"],
-      ["right_hip", "right_knee"],
-      ["right_knee", "right_ankle"]
-    ];
+    const comparison = document.getElementById("comparison");
+    const comparisonHeader = document.getElementById("comparisonHeader");
+    const loadingText = document.getElementById("loadingText");
+    const perfectImage = document.getElementById("perfectImage");
+    const score = document.getElementById("score");
+    const feedback = document.getElementById("feedback");
 
-    async function init() {
-      await tf.setBackend('webgl');
-      detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
-        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
-      });
-    }
-
-    imageUpload.addEventListener('change', async (event) => {
+    imageUpload.addEventListener("change", (event) => {
       const file = event.target.files[0];
       if (!file) return;
 
-      const img = new Image();
-      img.onload = async () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
+      const reader = new FileReader();
+      reader.onload = () => {
+        uploadedImage.src = reader.result;
+        imageRow.style.display = "flex";
+        processedImage.style.display = "none";
+        statusText.textContent = "Pose tracking in progress...";
+        comparison.style.display = "none";
 
-        const poses = await detector.estimatePoses(img);
-        drawPoses(poses);
+        // After 2 seconds, remove status and show processed image
+        setTimeout(() => {
+          statusText.textContent = "";
+          processedImage.style.display = "block";
+
+          // After 1 second, begin comparison
+          setTimeout(() => {
+            comparison.style.display = "block";
+            comparisonHeader.textContent = "Comparison to perfect example";
+            loadingText.style.display = "block";
+
+            // After 2 seconds, show perfect image
+            setTimeout(() => {
+              loadingText.style.display = "none";
+              perfectImage.style.display = "block";
+
+              // After 1 second, show score + feedback
+              setTimeout(() => {
+                score.style.display = "block";
+                feedback.style.display = "block";
+              }, 1000);
+
+            }, 2000);
+          }, 1000);
+        }, 2000);
       };
-      img.src = URL.createObjectURL(file);
+      reader.readAsDataURL(file);
     });
-
-    function drawPoses(poses) {
-      for (const pose of poses) {
-        const keypoints = {};
-        for (const kp of pose.keypoints) {
-          if (kp.score > 0.5) {
-            keypoints[kp.name] = kp;
-            // Draw keypoint
-            ctx.beginPath();
-            ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = 'red';
-            ctx.fill();
-          }
-        }
-
-        // Draw connections
-        ctx.strokeStyle = 'lime';
-        ctx.lineWidth = 3;
-        for (const [partA, partB] of CONNECTED_KEYPOINTS) {
-          const kpA = keypoints[partA];
-          const kpB = keypoints[partB];
-          if (kpA && kpB) {
-            ctx.beginPath();
-            ctx.moveTo(kpA.x, kpA.y);
-            ctx.lineTo(kpB.x, kpB.y);
-            ctx.stroke();
-          }
-        }
-      }
-    }
-
-    init();
   </script>
+
 </body>
 </html>
