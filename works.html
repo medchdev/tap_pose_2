@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pose Detection on Image</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 2rem;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h2>Upload an Image for Pose Tracking</h2>
+  <input type="file" id="imageUpload" accept="image/*">
+  <br><br>
+  <canvas id="canvas"></canvas>
+
+  <!-- TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
+  <!-- Pose Detection Model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <!-- TensorFlow.js backend -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+
+  <script>
+    const imageUpload = document.getElementById('imageUpload');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let detector;
+
+    // Pairs of keypoints to draw connections
+    const CONNECTED_KEYPOINTS = [
+      // Torso
+      ["left_shoulder", "right_shoulder"],
+      ["left_shoulder", "left_hip"],
+      ["right_shoulder", "right_hip"],
+      ["left_hip", "right_hip"],
+      // Arms
+      ["left_shoulder", "left_elbow"],
+      ["left_elbow", "left_wrist"],
+      ["right_shoulder", "right_elbow"],
+      ["right_elbow", "right_wrist"],
+      // Legs
+      ["left_hip", "left_knee"],
+      ["left_knee", "left_ankle"],
+      ["right_hip", "right_knee"],
+      ["right_knee", "right_ankle"]
+    ];
+
+    async function init() {
+      await tf.setBackend('webgl');
+      detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+      });
+    }
+
+    imageUpload.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const img = new Image();
+      img.onload = async () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const poses = await detector.estimatePoses(img);
+        drawPoses(poses);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    function drawPoses(poses) {
+      for (const pose of poses) {
+        const keypoints = {};
+        for (const kp of pose.keypoints) {
+          if (kp.score > 0.5) {
+            keypoints[kp.name] = kp;
+            // Draw keypoint
+            ctx.beginPath();
+            ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'red';
+            ctx.fill();
+          }
+        }
+
+        // Draw connections
+        ctx.strokeStyle = 'lime';
+        ctx.lineWidth = 3;
+        for (const [partA, partB] of CONNECTED_KEYPOINTS) {
+          const kpA = keypoints[partA];
+          const kpB = keypoints[partB];
+          if (kpA && kpB) {
+            ctx.beginPath();
+            ctx.moveTo(kpA.x, kpA.y);
+            ctx.lineTo(kpB.x, kpB.y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
